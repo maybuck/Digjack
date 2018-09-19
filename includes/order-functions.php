@@ -673,12 +673,14 @@ function dokan_get_admin_commission_by( $order, $seller_id ) {
 
     $refund_t += $order->get_total_tax_refunded() + $order->get_total_shipping_refunded();
     $refund_ut = $order->get_total_refunded() - $refund_t;
+	$shipping_total = $order->get_shipping_total();
+
 
     if ( $total_line ) {
         foreach ( $commissions as $commission ) {
             $commission['ut_amount'] = $refund_ut * ( $commission['total_line'] / $total_line );
             if ( 'percentage' == $commission['fee_type'] ) {
-                $admin_commission += ( $commission['total_line'] + $commission['ut_amount'] ) * $commission['admin_fee'] /100;
+                $admin_commission += ($shipping_total + $commission['total_line'] + $commission['ut_amount'] ) * $commission['admin_fee'] /100;
             } else {
                 $admin_commission += $commission['admin_fee'];
             }
