@@ -18,6 +18,10 @@ class Dokan_Order_Manager {
 
         // prevent non-vendor coupons from being added
         add_filter( 'woocommerce_coupon_is_valid', array( $this, 'ensure_vendor_coupon' ), 10, 3 );
+
+        if ( is_admin() ) {
+            add_action( 'woocommerce_process_shop_order_meta', 'dokan_sync_insert_order' );
+        }
     }
 
     /**
@@ -359,7 +363,7 @@ class Dokan_Order_Manager {
 
         // Get all shipping methods for parent order
         $shipping_methods = $parent_order->get_shipping_methods();
-        $order_seller_id  = dokan_get_seller_id_by_order( $order->get_id() );
+        $order_seller_id  = dokan_get_seller_id_by_order_id( $order->get_id() );
 
         $applied_shipping_method = '';
 

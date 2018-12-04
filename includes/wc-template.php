@@ -129,10 +129,11 @@ add_filter( 'woocommerce_register_post_type_product', 'dokan_manage_capability_f
  *
  * @return void
  */
-function dokan_author_field_quick_edit(){
+function dokan_author_field_quick_edit() {
     if ( ! current_user_can( 'manage_woocommerce' ) ) {
         return;
     }
+
     $admin_user = get_user_by( 'id', get_current_user_id() );
     $user_query = new WP_User_Query( array( 'role' => 'seller' ) );
     $sellers    = $user_query->get_results();
@@ -145,6 +146,7 @@ function dokan_author_field_quick_edit(){
                     <?php if ( ! $sellers ): ?>
                         <option value="<?php echo $admin_user->ID ?>"><?php echo $admin_user->display_name; ?></option>
                     <?php else: ?>
+                        <option value=""><?php _e( '— No change —', 'dokan-lite' ); ?></option>
                         <option value="<?php echo $admin_user->ID; ?>"><?php echo $admin_user->display_name; ?></option>
                         <?php foreach ( $sellers as $key => $user): ?>
                             <option value="<?php echo $user->ID ?>"><?php echo $user->display_name; ?></option>
@@ -174,6 +176,7 @@ function dokan_author_field_quick_edit(){
 }
 
 add_action( 'woocommerce_product_quick_edit_end',  'dokan_author_field_quick_edit' );
+add_action( 'woocommerce_product_bulk_edit_end',  'dokan_author_field_quick_edit' );
 
 /**
  * Assign value for quick edit data
@@ -206,18 +209,24 @@ add_action( 'manage_product_posts_custom_column', 'dokan_vendor_quick_edit_data'
  *
  * @return void
  */
-function dokan_save_quick_edit_vendor_data ( $product ){
+function dokan_save_quick_edit_vendor_data ( $product ) {
     if ( ! current_user_can( 'manage_woocommerce' ) ) {
         return;
     }
 
     if ( isset( $_REQUEST['dokan_product_author_override'] ) ) {
         $vendor_id = esc_attr( $_REQUEST['dokan_product_author_override'] );
+
+        if ( ! $vendor_id ) {
+            return;
+        }
+
         wp_update_post( array( 'ID' => $product->get_id(), 'post_author' => $vendor_id  ) );
     }
 }
 
 add_action( 'woocommerce_product_quick_edit_save', 'dokan_save_quick_edit_vendor_data', 10, 1 );
+add_action( 'woocommerce_product_bulk_edit_save', 'dokan_save_quick_edit_vendor_data', 10, 1 );
 
 /**
  * Add go to vendor dashboard button to my account page
@@ -269,3 +278,32 @@ function dokan_attach_vendor_name( $item_id, $order ) {
 }
 
 add_action( 'woocommerce_order_item_meta_start', 'dokan_attach_vendor_name', 10, 2 );
+
+/**
+ * Enable yoast seo breadcrums in dokan store page
+ *
+ * @param  array $crumbs
+ *
+ * @return array
+ */
+function enable_yoast_breadcrumb( $crumbs ) {
+    if ( ! dokan_is_store_page() ) {
+        return $crumbs;
+    }
+
+    $vendor    = dokan()->vendor->get( get_query_var( 'author' ) );
+    $store_url = dokan_get_option( 'custom_store_url', 'dokan_general', 'store' );
+
+    if ( $vendor->get_id() === 0 ) {
+        return $crumbs;
+    }
+
+    $crumbs[1]['text']  = ucwords( $store_url );
+    $crumbs[1]['url']   = site_url() . '/' . $store_url;
+    $crumbs[2]['text']  = $vendor->get_shop_name();
+    $crumbs[2]['url']   = $vendor->get_shop_url();
+
+    return $crumbs;
+}
+
+add_filter( 'wpseo_breadcrumb_links', 'enable_yoast_breadcrumb' );

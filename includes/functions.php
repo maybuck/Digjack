@@ -210,16 +210,16 @@ function dokan_count_posts( $post_type, $user_id ) {
     global $wpdb;
 
     $cache_group = 'dokan_seller_product_data_'.$user_id;
-    $cache_key = 'dokan-count-' . $post_type . '-' . $user_id;
-    $counts = wp_cache_get( $cache_key, $cache_group );
+    $cache_key   = 'dokan-count-' . $post_type . '-' . $user_id;
+    $counts      = wp_cache_get( $cache_key, $cache_group );
 
     if ( false === $counts ) {
-        $query = "SELECT post_status, COUNT( * ) AS num_posts FROM {$wpdb->posts} WHERE post_type = %s AND post_author = %d GROUP BY post_status";
-        $results = $wpdb->get_results( $wpdb->prepare( $query, $post_type, $user_id ), ARRAY_A );
+        $query       = apply_filters( 'dokan_count_posts', "SELECT post_status, COUNT( * ) AS num_posts FROM {$wpdb->posts} WHERE post_type = %s AND post_author = %d GROUP BY post_status" );
+        $results     = $wpdb->get_results( $wpdb->prepare( $query, $post_type, $user_id ), ARRAY_A );
         $post_status = array_keys( dokan_get_post_status() );
-        $counts = array_fill_keys( get_post_stati(), 0 );
+        $counts      = array_fill_keys( get_post_stati(), 0 );
+        $total       = 0;
 
-        $total = 0;
         foreach ( $results as $row ) {
             if ( ! in_array( $row['post_status'], $post_status ) ) {
                 continue;
@@ -325,12 +325,13 @@ function dokan_author_total_sales( $seller_id ) {
 
     if ( $earnings === false ) {
 
-        $sql = "SELECT SUM(order_total) as earnings
+        $sql = "SELECT SUM(order_total) as earnings, SUM(refund_amount) as refund_total
             FROM {$wpdb->prefix}dokan_orders as do LEFT JOIN {$wpdb->prefix}posts as p ON do.order_id = p.ID
-            WHERE seller_id = %d AND order_status IN('wc-completed', 'wc-processing', 'wc-on-hold')";
+            LEFT JOIN {$wpdb->prefix}dokan_refund as refund ON do.order_id = refund.order_id AND status = '1'
+            WHERE do.seller_id = %d AND order_status IN('wc-completed', 'wc-processing', 'wc-on-hold')";
 
-        $count = $wpdb->get_row( $wpdb->prepare( $sql, $seller_id ) );
-        $earnings = $count->earnings;
+        $count    = $wpdb->get_row( $wpdb->prepare( $sql, $seller_id ) );
+        $earnings = $count->earnings - $count->refund_total;
 
         wp_cache_set( $cache_key, $earnings, $cache_group );
         dokan_cache_update_group( $cache_key , $cache_group );
@@ -467,8 +468,9 @@ function dokan_get_seller_percentage( $seller_id = 0, $product_id = 0, $category
 
         //category wise percentage
         $category_commission = dokan_get_category_wise_seller_commission( $product_id, $category_id );
+        $is_single_category  = dokan_get_option( 'product_category_style', 'dokan_selling', 'single' );
 
-        if ( $category_commission != '' && is_numeric( $category_commission ) && $category_commission >= 0 ) {
+        if ( $is_single_category == 'single' && $category_commission != '' && is_numeric( $category_commission ) && $category_commission >= 0 ) {
 
             $category_commission_type = dokan_get_category_wise_seller_commission_type( $product_id, $category_id );
 
@@ -1128,24 +1130,13 @@ add_filter( 'ajax_query_attachments_args', 'dokan_media_uploader_restrict' );
  * @return array
  */
 function dokan_get_store_info( $seller_id ) {
-    $info = get_user_meta( $seller_id, 'dokan_profile_settings', true );
-    $info = is_array( $info ) ? $info : array();
+    $vendor = dokan()->vendor->get( $seller_id );
 
-    $defaults = array(
-        'store_name' => '',
-        'social'     => array(),
-        'payment'    => array( 'paypal' => array( 'email' ), 'bank' => array() ),
-        'phone'      => '',
-        'show_email' => 'off',
-        'address'    => '',
-        'location'   => '',
-        'banner'     => 0
-    );
+    if ( ! $vendor->get_id() ) {
+        return null;
+    }
 
-    $info               = wp_parse_args( $info, $defaults );
-    $info['store_name'] = empty( $info['store_name'] ) ? get_user_by( 'id', $seller_id )->display_name : $info['store_name'];
-
-    return $info;
+    return $vendor->get_shop_info();
 }
 
 /**
@@ -2877,11 +2868,16 @@ function dokan_stop_sending_multiple_email() {
     if ( did_action( 'woocommerce_order_status_pending_to_processing_notification' ) == 1 ) {
         dokan_remove_hook_for_anonymous_class( 'woocommerce_order_status_pending_to_processing_notification', 'WC_Email_Customer_Processing_Order', 'trigger', 10 );
     }
+
+    if ( did_action( 'woocommerce_order_status_completed_notification' ) == 1 ) {
+        dokan_remove_hook_for_anonymous_class( 'woocommerce_order_status_completed_notification', 'WC_Email_Customer_Completed_Order', 'trigger', 10 );
+    }
 }
 
 add_action( 'woocommerce_order_status_pending_to_on-hold', 'dokan_stop_sending_multiple_email' );
 add_action( 'woocommerce_order_status_on-hold_to_processing', 'dokan_stop_sending_multiple_email' );
 add_action( 'woocommerce_order_status_pending_to_processing', 'dokan_stop_sending_multiple_email' );
+add_action( 'woocommerce_order_status_completed', 'dokan_stop_sending_multiple_email' );
 
 /**
  * Remove hook for anonymous class

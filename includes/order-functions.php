@@ -664,7 +664,7 @@ function dokan_get_admin_commission_by( $order, $seller_id ) {
         foreach ( $commissions as $commission ) {
             $commission['ut_amount'] = $refund_ut * ( $commission['total_line'] / $total_line );
             if ( 'percentage' == $commission['fee_type'] ) {
-                $admin_commission += ($shipping_total + $commission['total_line'] + $commission['ut_amount'] ) * $commission['admin_fee'] /100;
+                $admin_commission += ($shipping_total + + $commission['total_line'] + $commission['ut_amount'] ) * $commission['admin_fee'] /100;
             } else {
                 $admin_commission += $commission['admin_fee'];
             }
@@ -918,8 +918,8 @@ function dokan_get_seller_id_by_order_id( $id ) {
 
     $items = $order->get_items( 'line_item' );
 
-    if ( ! is_array( $items ) ) {
-        return 0;
+    if ( ! is_array( $items ) || empty( $items ) ) {
+        return;
     }
 
     foreach ( $items as $item ) {
@@ -928,6 +928,10 @@ function dokan_get_seller_id_by_order_id( $id ) {
     }
 
     $seller_id = get_post_field( 'post_author', $product_id );
+
+    if ( empty( $seller_id ) ) {
+        return;
+    }
 
     return $seller_id;
 }
